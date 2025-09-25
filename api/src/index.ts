@@ -308,7 +308,7 @@ async function startServer() {
     try {
         await connectDatabase();
         await Vendor.sync();
-        await Booking.sync();
+        await Booking.sync({});
         await BookingSlot.sync();
         await IdempotencyKey.sync();
         await Payment.sync();

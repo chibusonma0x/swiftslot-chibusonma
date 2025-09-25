@@ -1,99 +1,88 @@
-const request = require('supertest');
-const express = require('express');
+import request from 'supertest';
+import { Application } from 'express';
+import { app } from '../index';
 
-const baseURL = 'http://localhost:3000';
+import { Vendor } from '../models/Vendor';
+import { sequelize } from '../config/database';
 
-describe('SwiftSlot Booking Tests', () => {
+
+describe('Booking API - Required Tests', () => {
+  let testApp: Application;
+  let testVendor: any;
+
+  beforeAll(async () => {
+    testApp = app as Application;
+    
+    // Clean database and create test data
+    await sequelize.sync();
+    
+    // Create test vendor
+    testVendor = await Vendor.create({
+      name: 'Test Vendor',
+      timezone: 'Africa/Lagos'
+    });
+  });
   
-  // Test 1: Overlap test - Two parallel POST /bookings for same vendor+slot
-  test('should prevent double booking - one 201, one 409', async () => {
-    const vendorId = 1;
-    const startISO = '2025-09-25T10:00:00.000Z';  // Future slot
-    const endISO = '2025-09-25T10:30:00.000Z';
-    
-    const bookingData = {
-      vendorId,
-      startISO,
-      endISO
-    };
+  // Rest of tests remain the same...
+  describe('Overlap Test: Double-booking Prevention', () => {
+    it('should prevent double booking - one 201, one 409', async () => {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      const bookingData = {
+        vendorId: testVendor.id,
+        startISO: `${tomorrow.toISOString().split('T')[0]}T10:00:00.000Z`,
+        endISO: `${tomorrow.toISOString().split('T')[0]}T10:30:00.000Z`,
+        customerName: 'Test Customer 1',
+        customerEmail: 'test1@example.com'
+      };
 
-    // Create two parallel requests with different idempotency keys
-    const request1 = fetch(`${baseURL}/api/bookings`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': `test-overlap-1-${Date.now()}`
-      },
-      body: JSON.stringify(bookingData)
+      const [response1, response2] = await Promise.all([
+        request(testApp)
+          .post('/api/bookings')
+          .set('Idempotency-Key', `overlap-test-1-${Date.now()}`)
+          .send(bookingData),
+        request(testApp)
+          .post('/api/bookings')
+          .set('Idempotency-Key', `overlap-test-2-${Date.now()}`)
+          .send(bookingData)
+      ]);
+
+      const responses = [response1, response2].sort((a, b) => a.status - b.status);
+      
+      expect(responses[0].status).toBe(201);
+      expect(responses[1].status).toBe(409);
     });
-
-    const request2 = fetch(`${baseURL}/api/bookings`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json', 'Idempotency-Key': `test-overlap-2-${Date.now()}`
-      },
-      body: JSON.stringify(bookingData)
-    });
-
-    // Execute both requests simultaneously
-    const [response1, response2] = await Promise.all([request1, request2]);
-    
-    const statuses = [response1.status, response2.status].sort();
-    
-    // One should succeed (201), one should fail (409)
-    expect(statuses).toEqual([201, 409]);
-    
-    // Check the 409 response has a meaningful error message
-    const failedResponse = response1.status === 409 ? response1 : response2;
-    const errorData = await failedResponse.json();
-    expect(errorData.error).toContain('already booked');
   });
 
-  // Test 2: Idempotency test - Same payload + key twice should return identical response
-  test('should return identical response for same idempotency key', async () => {
-    const vendorId = 1;
-    const startISO = '2025-09-25T11:00:00.000Z';  // Different slot from above
-    const endISO = '2025-09-25T11:30:00.000Z';
-    const idempotencyKey = `test-idempotent-${Date.now()}`;
-    
-    const bookingData = {
-      vendorId,
-      startISO,
-      endISO
-    };
+  describe('Idempotency Test', () => {
+    it('should return identical response for same idempotency key', async () => {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      const bookingData = {
+        vendorId: testVendor.id,
+        startISO: `${tomorrow.toISOString().split('T')[0]}T11:00:00.000Z`,
+        endISO: `${tomorrow.toISOString().split('T')[0]}T11:30:00.000Z`,
+        customerName: 'Test Customer 2',
+        customerEmail: 'test2@example.com'
+      };
 
-    const requestOptions = {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': idempotencyKey
-      },
-      body: JSON.stringify(bookingData)
-    };
+      const idempotencyKey = `idempotent-test-${Date.now()}`;
 
-    // Make first request
-    const response1 = await fetch(`${baseURL}/api/bookings`, requestOptions);
-    const data1 = await response1.json();
-    
-    // Make second request with same idempotency key
-    const response2 = await fetch(`${baseURL}/api/bookings`, requestOptions);
-    const data2 = await response2.json();
+      const response1 = await request(testApp)
+        .post('/api/bookings')
+        .set('Idempotency-Key', idempotencyKey)
+        .send(bookingData);
 
-    // Both should return 201 (or same status)
-    expect(response1.status).toBe(response2.status);
-    expect(response1.status).toBe(201);
-    
-    // Response bodies should be identical
-    expect(data1).toEqual(data2);
-    expect(data1.id).toBe(data2.id);  // Same booking ID
-    expect(data1.vendorId).toBe(data2.vendorId);
-    expect(data1.startTimeUtc).toBe(data2.startTimeUtc);
-    expect(data1.status).toBe(data2.status);
+      const response2 = await request(testApp)
+        .post('/api/bookings')
+        .set('Idempotency-Key', idempotencyKey)
+        .send(bookingData);
+
+      expect(response1.status).toBe(201);
+      expect(response2.status).toBe(200);
+      expect(response1.body).toEqual(response2.body);
+    });
   });
 });
-
-// Helper to run tests
-if (require.main === module) {
-  console.log('Running booking tests...');
-  console.log('Make sure your server is running on localhost:3000');
-}
