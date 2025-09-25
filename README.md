@@ -23,7 +23,7 @@ Prerequisites
   
 Setup Instructions
 1. Clone Repository
-   git clone hgit clone https://github.com/chibusonma0x/swiftslot_chibusonma.git
+   git clone hgit clone https://github.com/chibusonma0x/swiftslot-chibusonma.git
 * cd swiftslot-chibusonma
 
 3. Backend Setup
