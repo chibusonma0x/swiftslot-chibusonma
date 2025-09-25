@@ -1,12 +1,12 @@
 import express from 'express';
 import { connectDatabase } from './config/database';
-import { Vendor } from './models/Vendor'; 
-import { Booking } from './models/Booking'; 
-import { BookingSlot } from './models/BookingSlot'; 
+import { Vendor } from './models/Vendor';
+import { Booking } from './models/Booking';
+import { BookingSlot } from './models/BookingSlot';
 import { generateTimeSlots, convertLagosToUtc, convertUtcToLagos } from './utils/timezone';
 import { Op, QueryTypes } from 'sequelize';
 import { addHours, isAfter } from 'date-fns';
-import { sequelize } from './config/database'; 
+import { sequelize } from './config/database';
 import { IdempotencyKey } from './models/IdempotencyKey';
 import { Payment } from './models/Payment';
 import cors from 'cors';
@@ -98,9 +98,8 @@ app.post('/api/bookings', async (req, res) => {
         );
 
         if (existingKey.length > 0) {
-
             const cachedResponse = JSON.parse((existingKey[0] as any).response_hash);
-            return res.status(201).json(cachedResponse);
+            return res.status(200).json(cachedResponse);
         }
 
 
@@ -304,23 +303,25 @@ app.get('/api/bookings/:id', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch booking' });
     }
 });
-async function startServer() {
-    try {
-        await connectDatabase();
-        await Vendor.sync();
-        await Booking.sync({});
-        await BookingSlot.sync();
-        await IdempotencyKey.sync();
-        await Payment.sync();
-        // await sequelize.sync();
-        await seedVendors();
-        app.listen(PORT, () => {
-            console.log(`Server running on port ${PORT}`);
-        });
-    } catch (error) {
-        console.error('Failed to start server:', error);
-        process.exit(1);
+if (require.main === module) {
+    const startServer = async () => {
+        try {
+            await connectDatabase();
+            await Vendor.sync();
+            await Booking.sync();
+            await BookingSlot.sync();
+            await IdempotencyKey.sync();
+            await Payment.sync();
+            // await sequelize.sync();
+            await seedVendors();
+            app.listen(PORT, () => {
+                console.log(`Server running on port ${PORT}`);
+            });
+        } catch (error) {
+            console.error('Failed to start server:', error);
+            process.exit(1);
+        }
     }
+    startServer();
 }
-startServer();
 export { app };

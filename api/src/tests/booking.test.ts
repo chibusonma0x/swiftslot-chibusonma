@@ -12,23 +12,23 @@ describe('Booking API - Required Tests', () => {
 
   beforeAll(async () => {
     testApp = app as Application;
-    
+
     // Clean database and create test data
     await sequelize.sync();
-    
+
     // Create test vendor
     testVendor = await Vendor.create({
       name: 'Test Vendor',
       timezone: 'Africa/Lagos'
     });
   });
-  
+
   // Rest of tests remain the same...
   describe('Overlap Test: Double-booking Prevention', () => {
     it('should prevent double booking - one 201, one 409', async () => {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
-      
+
       const bookingData = {
         vendorId: testVendor.id,
         startISO: `${tomorrow.toISOString().split('T')[0]}T10:00:00.000Z`,
@@ -49,7 +49,7 @@ describe('Booking API - Required Tests', () => {
       ]);
 
       const responses = [response1, response2].sort((a, b) => a.status - b.status);
-      
+
       expect(responses[0].status).toBe(201);
       expect(responses[1].status).toBe(409);
     });
@@ -59,7 +59,7 @@ describe('Booking API - Required Tests', () => {
     it('should return identical response for same idempotency key', async () => {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
-      
+
       const bookingData = {
         vendorId: testVendor.id,
         startISO: `${tomorrow.toISOString().split('T')[0]}T11:00:00.000Z`,
